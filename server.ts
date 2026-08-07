@@ -1,12 +1,14 @@
 import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
+import jwtPkg from 'jsonwebtoken';
 import { createServer as createViteServer } from 'vite';
 import * as insforge from './insforge';
 
+const jwt: any = (jwtPkg as any)?.default || jwtPkg;
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'vauth-jwt-secret-key-2026';
 
 app.use(express.json());
