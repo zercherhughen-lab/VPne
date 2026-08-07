@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Global CORS & Public REST API Middleware for all /api/ endpoints
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, api-key, secret-id, service, x-api-key, x-secret-id, x-service, service-name, Api-Key, Secret-Id, Service');
@@ -29,6 +29,16 @@ app.use('/api', (req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).json({ ok: true });
   }
+
+  // Sincronizar servicios en serverless
+  if (services.length === 0) {
+    try {
+      await syncServicesWithInsForge();
+    } catch {
+      // ignore
+    }
+  }
+
   next();
 });
 
@@ -1416,13 +1426,13 @@ async function startServer() {
     });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -1430,14 +1440,22 @@ async function startServer() {
     });
   }
 
-  // Start polling InsForge every 1 second
-  setInterval(async () => {
-    await syncServicesWithInsForge();
-  }, 1000);
+  // Start polling InsForge every 1 second (only in persistent mode)
+  if (!process.env.VERCEL) {
+    setInterval(async () => {
+      await syncServicesWithInsForge();
+    }, 1000);
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
+export { app };
+
