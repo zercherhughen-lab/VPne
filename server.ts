@@ -105,7 +105,18 @@ const users: DBUser[] = [
   },
 ];
 
-const services: DBService[] = [];
+const services: DBService[] = [
+  {
+    id: 'srv-demo-1',
+    userId: 'user-demo-1',
+    name: 'Vape Client',
+    prefix: 'VAP',
+    description: 'Servicio Principal VAuth',
+    apiKey: '69415e37f9f2604ceb4852dc6b00ff1b',
+    secretId: 'sec_e7c1376ec414edc901bfbfc3',
+    createdAt: new Date().toISOString(),
+  }
+];
 
 const licenses: DBLicense[] = [];
 
@@ -219,7 +230,7 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 // STATS ROUTE
 app.get('/api/stats', authenticateToken, (req, res) => {
   const user = (req as any).user as DBUser;
-  const userServices = services.filter((s) => s.userId === user.id);
+  const userServices = services.filter((s) => s.userId === user.id || s.userId === 'user-demo-1');
   const userSrvIds = userServices.map((s) => s.id);
   const userLicenses = licenses.filter((l) => userSrvIds.includes(l.serviceId));
 
@@ -275,11 +286,11 @@ async function syncServicesWithInsForge() {
       const freshServices: DBService[] = dbServices
         .filter((record: any) => record && (record.name || record.service_name || record.title || record.service || record.id))
         .map((record: any) => {
-          const sName = record.name || record.service_name || record.title || record.service || 'Servicio';
+          const sName = String(record.name || record.service_name || record.title || record.service || 'Servicio');
           return {
             id: String(record.id || 'srv-' + Date.now()),
-            userId: record.user_id || record.userId || 'user-demo-1',
-            name: String(sName),
+            userId: String(record.user_id || record.userId || 'user-demo-1'),
+            name: sName,
             prefix: String(record.prefix || sName.slice(0, 3)).toUpperCase(),
             description: String(record.description || ''),
             apiKey: String(record.api_key || record.apiKey || generateApiKey()),
@@ -290,7 +301,7 @@ async function syncServicesWithInsForge() {
 
       for (const fresh of freshServices) {
         const idx = services.findIndex(
-          (s) => s.id === fresh.id || s.name.toLowerCase() === fresh.name.toLowerCase()
+          (s) => s.id === fresh.id || (s.name && fresh.name && s.name.toLowerCase() === fresh.name.toLowerCase())
         );
         if (idx !== -1) {
           services[idx] = { ...services[idx], ...fresh };
@@ -306,13 +317,18 @@ async function syncServicesWithInsForge() {
 
 // SERVICES API ROUTES
 app.get('/api/services', authenticateToken, async (req, res) => {
-  await syncServicesWithInsForge();
-  const user = (req as any).user as DBUser;
-  const userServices = services;
+  try {
+    await syncServicesWithInsForge();
+  } catch {
+    // ignore
+  }
 
-  const response = userServices.map((s) => {
-    const srvLicenses = licenses.filter((l) => l.serviceId === s.id);
-    const srvRanks = ranks.filter((r) => r.serviceId === s.id);
+  const user = (req as any).user as DBUser;
+  const userServices = services || [];
+
+  const response = userServices.filter(Boolean).map((s) => {
+    const srvLicenses = licenses.filter((l) => l && l.serviceId === s.id);
+    const srvRanks = ranks.filter((r) => r && r.serviceId === s.id);
     return {
       id: s.id,
       user_id: s.userId,
